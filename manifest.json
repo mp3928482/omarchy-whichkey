@@ -5,9 +5,10 @@
   "version": "0.1.0",
   "author": "mp3928482",
   "description": "Modifier-reactive keybinding HUD: hold Super to see its bindings, add Shift/Ctrl/Alt to swap the list.",
-  "kinds": ["overlay"],
+  "kinds": ["overlay", "service"],
   "keepLoaded": true,
   "entryPoints": {
-    "overlay": "WhichKey.qml"
+    "overlay": "WhichKey.qml",
+    "service": "Service.qml"
   }
 }

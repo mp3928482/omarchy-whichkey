@@ -7,21 +7,25 @@ swaps to that chord. Release the modifiers and it vanishes.
 ```
 whichkey-keyd (evdev)  --IPC-->  WhichKey.qml overlay  <--reads--  index.json
 watches modifier keys            visual-only layer-shell           built from
-                                 card, never focused               `omarchy menu
-                                                                    keybindings
+run by Service.qml for           card, never focused               `omarchy menu
+the life of the shell                                               keybindings
                                                                     --print`
 ```
+
+The plugin's `service` entrypoint runs the daemon, so there is no systemd unit
+to install and nothing to `systemctl enable`. The one manual step is putting
+your user in the `input` group (see Install).
 
 ## Files
 
 | File             | Role                                                            |
 |------------------|----------------------------------------------------------------|
-| `manifest.json`  | Plugin manifest (`overlay`, `keepLoaded` so its IPC is live).   |
+| `manifest.json`  | Plugin manifest (`overlay` + `service`, `keepLoaded` so its IPC is live). |
 | `WhichKey.qml`   | The HUD. IPC target `whichkey`: `mods <MASK>`, `hide`, `rebuild`, `state`, `debug`. |
+| `Service.qml`    | `service` entrypoint: runs and supervises `whichkey-keyd` for the life of the shell. |
 | `build-index.sh` | Parses `omarchy menu keybindings --print` into the cache file.  |
 | `collapse.py`    | Collapses `1..0` digit runs (workspace binds) into one row.     |
 | `whichkey-keyd`  | evdev daemon: turns modifier press/release into `mods` IPC.     |
-| `whichkey-keyd.service` | user systemd unit; you copy it into `~/.config/systemd/user/` (see Install). |
 
 The generated index lives at `~/.cache/omarchy-whichkey/index.json` — **not** in
 this directory, because the shell watches the plugin dir and would reload the
@@ -43,18 +47,23 @@ sudo pacman -S --needed python-evdev        # or: omarchy pkg add python-evdev
 #    NOTE: the 'input' group can read all keystrokes -- that is inherent to a
 #    global key-state watcher. Skip this project if that isn't acceptable.
 sudo usermod -aG input "$USER"
-#    then log out and back in (or reboot) for the group to take effect
+#    Then FULLY log out of the desktop and back in, or reboot. A screen
+#    lock/unlock or a new terminal does NOT pick up the new group; `id -nG`
+#    must list `input` before the daemon can start.
 
-# 3. enable the daemon
-cp ~/.config/omarchy/plugins/io.github.mp3928482.whichkey/whichkey-keyd.service \
-  ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now whichkey-keyd.service
-systemctl --user status whichkey-keyd.service    # should be active (running)
+# 3. enable the plugin and restart the shell so it loads the service entrypoint
+omarchy-shell shell setPluginEnabled io.github.mp3928482.whichkey true
+omarchy restart shell
 ```
 
-The plugin itself is already enabled (`omarchy-shell shell listPlugins | grep whichkey`).
-Without the daemon the overlay just sits idle and never shows.
+That's it -- no systemd unit, no separate service to enable. `Service.qml`
+starts `whichkey-keyd` when the shell loads and restarts it if it exits. Until
+your user is in the `input` group and you have logged back in, the daemon exits
+on start; the supervisor retries a few times fast, then every 60s, and picks up
+on its own once the group is in effect (no `omarchy restart shell` needed then).
+
+Check it is running: `pgrep -af whichkey-keyd`. Without it the overlay just
+sits idle and never shows.
 
 ## Test without the daemon
 
