@@ -22,7 +22,7 @@ except ImportError:
              "(run: omarchy pkg add python-evdev)")
 
 # --- config -----------------------------------------------------------------
-SHOW_DELAY = 0.18   # seconds a chord must stay held before the HUD appears
+SHOW_DELAY = 0.3    # seconds a chord must stay held before the HUD appears
 SUPER_ONLY = True   # True: only show the HUD while Super is part of the chord
 # --------------------------------------------------------------------------
 
