@@ -1,4 +1,4 @@
-# mike.whichkey
+# io.github.mp3928482.whichkey
 
 A modifier-reactive keybinding HUD for Omarchy. Hold **Super** and a centered
 card lists every Super binding; add **Shift** / **Ctrl** / **Alt** and the list
@@ -30,11 +30,11 @@ plugin on every write.
 ## Install
 
 ```bash
-# 0. clone into the plugin dir. The directory name MUST be `mike.whichkey`
-#    (it has to match the `id` in manifest.json) even though the repo is
-#    named omarchy-whichkey.
+# 0. clone into the plugin dir. The directory name MUST be
+#    `io.github.mp3928482.whichkey` (it has to match the `id` in
+#    manifest.json) even though the repo is named omarchy-whichkey.
 git clone https://github.com/mp3928482/omarchy-whichkey.git \
-  ~/.config/omarchy/plugins/mike.whichkey
+  ~/.config/omarchy/plugins/io.github.mp3928482.whichkey
 
 # 1. evdev bindings for the daemon
 sudo pacman -S --needed python-evdev        # or: omarchy pkg add python-evdev
@@ -46,7 +46,7 @@ sudo usermod -aG input "$USER"
 #    then log out and back in (or reboot) for the group to take effect
 
 # 3. enable the daemon
-cp ~/.config/omarchy/plugins/mike.whichkey/whichkey-keyd.service \
+cp ~/.config/omarchy/plugins/io.github.mp3928482.whichkey/whichkey-keyd.service \
   ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now whichkey-keyd.service

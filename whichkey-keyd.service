@@ -5,7 +5,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.config/omarchy/plugins/mike.whichkey/whichkey-keyd
+ExecStart=%h/.config/omarchy/plugins/io.github.mp3928482.whichkey/whichkey-keyd
 Restart=on-failure
 RestartSec=2
 

@@ -24,7 +24,7 @@ Item {
   property var manifest: null
   property string omarchyPath: Quickshell.env("OMARCHY_PATH")
 
-  readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/mike.whichkey"
+  readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.mp3928482.whichkey"
   readonly property string cacheDir: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/omarchy-whichkey"
 
   property var index: ({})

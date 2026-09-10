@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "mike.whichkey",
+  "id": "io.github.mp3928482.whichkey",
   "name": "Which-Key",
   "version": "0.1.0",
-  "author": "mike",
+  "author": "mp3928482",
   "description": "Modifier-reactive keybinding HUD: hold Super to see its bindings, add Shift/Ctrl/Alt to swap the list.",
   "kinds": ["overlay"],
   "keepLoaded": true,
