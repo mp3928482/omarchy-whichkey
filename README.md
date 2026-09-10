@@ -68,7 +68,7 @@ omarchy-shell whichkey debug        # what the overlay currently thinks
 ## Tuning
 
 - **Show only Super chords**: set `SUPER_ONLY = True` at the top of `whichkey-keyd`.
-- **Appear sooner / later**: `SHOW_DELAY` in `whichkey-keyd` (seconds; default 0.18).
+- **Appear sooner / later**: `SHOW_DELAY` in `whichkey-keyd` (seconds; default 0.3).
 - **Column height / width**: `availH` cap (`rowH * 18`) and `colW` in `WhichKey.qml`.
 - **Keep pointer/scroll bindings**: remove the `MOUSE|mouse_` skip line in `build-index.sh`.
 - After editing `WhichKey.qml` you must `omarchy restart shell` — Qt caches
@@ -78,8 +78,10 @@ omarchy-shell whichkey debug        # what the overlay currently thinks
 
 ## Known limitations
 
-- Hotplugged keyboards aren't picked up; `systemctl --user restart whichkey-keyd`
-  after plugging one in. (pyudev would fix this.)
+- Hotplugged keyboards, and keyboards that re-enumerate to a new
+  `/dev/input/event*` node (the AULA does this on reconnect / mode switch), are
+  picked up by a rescan within `RESCAN_SEC` (2s) — no restart needed. A modifier
+  held at the instant its keyboard drops is treated as released.
 - The HUD can flash briefly during a fast `Super`+key press if the key is slower
   than `SHOW_DELAY`; that's expected which-key behavior.
 

@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 try:
     from evdev import InputDevice, list_devices, ecodes as e
@@ -76,34 +77,51 @@ def sync():
     show_timer.start()
 
 
+RESCAN_SEC = 2.0    # how often to look for hotplugged / re-enumerated keyboards
+
+
 def is_keyboard(dev):
     caps = dev.capabilities().get(e.EV_KEY, [])
     letters = sum(1 for k in range(e.KEY_Q, e.KEY_P + 1) if k in caps)
     return letters >= 8 and any(m in caps for m in MODCAT)
 
 
-def main():
-    sel = selectors.DefaultSelector()
-    paths = list_devices()          # evdev only lists devices it can read
-    if not paths:
-        sys.exit("whichkey-keyd: cannot read any /dev/input/event* -- your user "
-                 "is not in the 'input' group yet, or you have not logged out "
-                 "and back in since being added (a new terminal is not enough)")
-
-    opened = keyboards = 0
-    for path in paths:
+def scan(sel):
+    """Register every readable keyboard not already watched. Returns the number
+    of devices currently registered."""
+    watched = {getattr(k.fileobj, "path", None) or getattr(k.fileobj, "fn", None)
+               for k in sel.get_map().values()} if sel.get_map() else set()
+    for path in list_devices():         # evdev only lists devices it can read
+        if path in watched:
+            continue
         try:
             dev = InputDevice(path)
         except OSError:
             continue
-        opened += 1
         if is_keyboard(dev):
             sel.register(dev, selectors.EVENT_READ)
-            keyboards += 1
+        else:
+            dev.close()
+    return len(sel.get_map())
 
-    if not keyboards:
-        sys.exit("whichkey-keyd: opened %d input device(s) but none look like a "
-                 "keyboard" % opened)
+
+def drop(sel, dev):
+    try:
+        sel.unregister(dev)
+        dev.close()
+    except OSError:
+        pass
+
+
+def main():
+    if not list_devices():
+        sys.exit("whichkey-keyd: cannot read any /dev/input/event* -- your user "
+                 "is not in the 'input' group yet, or you have not logged out "
+                 "and back in since being added (a new terminal is not enough)")
+
+    sel = selectors.DefaultSelector()
+    if not scan(sel):
+        sys.exit("whichkey-keyd: opened input devices but none look like a keyboard")
 
     def bye(*_):
         call("hide")
@@ -112,27 +130,27 @@ def main():
     signal.signal(signal.SIGTERM, bye)
     signal.signal(signal.SIGINT, bye)
 
-    # (Hotplugged keyboards are not picked up; restart the service if you add
-    # one. pyudev would fix this in a later revision.)
+    # Keyboards that re-enumerate to a new /dev/input/event* node (the AULA does
+    # this on reconnect / mode switch) or are plugged in later are picked up by
+    # the periodic rescan below -- no restart needed.
+    last_scan = time.monotonic()
     while True:
-        ready = sel.select()
-        for key, _ in ready:
+        if not sel.get_map():
+            time.sleep(RESCAN_SEC)      # every keyboard went away; keep looking
+            scan(sel)
+            last_scan = time.monotonic()
+            continue
+
+        for key, _ in sel.select(timeout=RESCAN_SEC):
             try:
                 events = list(key.fileobj.read())
             except OSError:
-                # The device node vanished (a keyboard that re-enumerates on
-                # resume/reconnect, e.g. the AULA). select() would keep
-                # returning this dead fd, so drop it. Exit when nothing is
-                # left and let systemd restart us to re-scan for the new node.
-                try:
-                    sel.unregister(key.fileobj)
-                    key.fileobj.close()
-                except OSError:
-                    pass
-                if not sel.get_map():
-                    call("hide")
-                    sys.exit("whichkey-keyd: all keyboards disappeared; "
-                             "restarting to re-enumerate")
+                # This node vanished (device unplugged or re-enumerating).
+                drop(sel, key.fileobj)
+                held.clear()             # don't leave a modifier stuck "held"
+                sync()
+                scan(sel)               # its replacement node is usually up now
+                last_scan = time.monotonic()
                 continue
             changed = False
             for ev in events:
@@ -146,6 +164,11 @@ def main():
                     changed = True
             if changed:
                 sync()
+
+        now = time.monotonic()
+        if now - last_scan >= RESCAN_SEC:
+            scan(sel)                   # catch a keyboard that appeared quietly
+            last_scan = now
 
 
 if __name__ == "__main__":
