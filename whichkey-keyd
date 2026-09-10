@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""whichkey-keyd -- watch every keyboard for modifier press/release and push the
+current canonical modifier mask to the Omarchy shell's Which-Key overlay.
+
+    hold Super            -> omarchy-shell -q whichkey mods "SUPER"
+    add Shift             -> omarchy-shell -q whichkey mods "SUPER+SHIFT"
+    release everything    -> omarchy-shell -q whichkey hide
+
+The daemon only reads input; it never grabs a device, so normal keybindings are
+unaffected. Reading /dev/input/event* requires membership in the 'input' group.
+"""
+import selectors
+import signal
+import subprocess
+import sys
+import threading
+
+try:
+    from evdev import InputDevice, list_devices, ecodes as e
+except ImportError:
+    sys.exit("whichkey-keyd: python-evdev not installed "
+             "(run: omarchy pkg add python-evdev)")
+
+# --- config -----------------------------------------------------------------
+SHOW_DELAY = 0.18   # seconds a chord must stay held before the HUD appears
+SUPER_ONLY = True   # True: only show the HUD while Super is part of the chord
+# --------------------------------------------------------------------------
+
+MODCAT = {
+    e.KEY_LEFTMETA: "SUPER",  e.KEY_RIGHTMETA: "SUPER",
+    e.KEY_LEFTCTRL: "CTRL",   e.KEY_RIGHTCTRL: "CTRL",
+    e.KEY_LEFTALT:  "ALT",    e.KEY_RIGHTALT:  "ALT",
+    e.KEY_LEFTSHIFT: "SHIFT", e.KEY_RIGHTSHIFT: "SHIFT",
+}
+ORDER = ("SUPER", "CTRL", "ALT", "SHIFT")
+
+held = set()          # modifier keycodes currently down
+sent = None           # last mask string handed to the shell
+show_timer = None
+
+
+def current_mask():
+    cats = {MODCAT[k] for k in held}
+    return "+".join(m for m in ORDER if m in cats)
+
+
+def call(*args):
+    try:
+        subprocess.run(("omarchy-shell", "-q", "whichkey", *args),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=1)
+    except Exception:
+        pass
+
+
+def sync():
+    global sent, show_timer
+    mask = current_mask()
+    if mask == sent:
+        return
+    sent = mask
+
+    if show_timer:
+        show_timer.cancel()
+        show_timer = None
+
+    visible = bool(mask) and (not SUPER_ONLY or "SUPER" in mask.split("+"))
+    if not visible:
+        call("hide")
+        return
+
+    # Debounce only the appearance, so a fast Super+K never flashes the HUD;
+    # once it is up, adding/removing Shift updates it immediately.
+    show_timer = threading.Timer(SHOW_DELAY, call, args=("mods", mask))
+    show_timer.daemon = True
+    show_timer.start()
+
+
+def is_keyboard(dev):
+    caps = dev.capabilities().get(e.EV_KEY, [])
+    letters = sum(1 for k in range(e.KEY_Q, e.KEY_P + 1) if k in caps)
+    return letters >= 8 and any(m in caps for m in MODCAT)
+
+
+def main():
+    sel = selectors.DefaultSelector()
+    paths = list_devices()          # evdev only lists devices it can read
+    if not paths:
+        sys.exit("whichkey-keyd: cannot read any /dev/input/event* -- your user "
+                 "is not in the 'input' group yet, or you have not logged out "
+                 "and back in since being added (a new terminal is not enough)")
+
+    opened = keyboards = 0
+    for path in paths:
+        try:
+            dev = InputDevice(path)
+        except OSError:
+            continue
+        opened += 1
+        if is_keyboard(dev):
+            sel.register(dev, selectors.EVENT_READ)
+            keyboards += 1
+
+    if not keyboards:
+        sys.exit("whichkey-keyd: opened %d input device(s) but none look like a "
+                 "keyboard" % opened)
+
+    def bye(*_):
+        call("hide")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, bye)
+    signal.signal(signal.SIGINT, bye)
+
+    # (Hotplugged keyboards are not picked up; restart the service if you add
+    # one. pyudev would fix this in a later revision.)
+    while True:
+        ready = sel.select()
+        for key, _ in ready:
+            try:
+                events = list(key.fileobj.read())
+            except OSError:
+                # The device node vanished (a keyboard that re-enumerates on
+                # resume/reconnect, e.g. the AULA). select() would keep
+                # returning this dead fd, so drop it. Exit when nothing is
+                # left and let systemd restart us to re-scan for the new node.
+                try:
+                    sel.unregister(key.fileobj)
+                    key.fileobj.close()
+                except OSError:
+                    pass
+                if not sel.get_map():
+                    call("hide")
+                    sys.exit("whichkey-keyd: all keyboards disappeared; "
+                             "restarting to re-enumerate")
+                continue
+            changed = False
+            for ev in events:
+                if ev.type != e.EV_KEY or ev.code not in MODCAT:
+                    continue
+                if ev.value == 1:
+                    held.add(ev.code)
+                    changed = True
+                elif ev.value == 0:
+                    held.discard(ev.code)
+                    changed = True
+            if changed:
+                sync()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,11 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local backups
+*.bak
+*.bak.*
+
+# The generated keybinding index lives in the XDG cache dir, never here,
+# but guard against a stray copy anyway.
+index.json

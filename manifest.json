@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "mike.whichkey",
+  "name": "Which-Key",
+  "version": "0.1.0",
+  "author": "mike",
+  "description": "Modifier-reactive keybinding HUD: hold Super to see its bindings, add Shift/Ctrl/Alt to swap the list.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "WhichKey.qml"
+  }
+}
