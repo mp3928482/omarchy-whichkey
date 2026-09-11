@@ -134,12 +134,17 @@ def main():
     # this on reconnect / mode switch) or are plugged in later are picked up by
     # the periodic rescan below -- no restart needed.
     last_scan = time.monotonic()
+    spin_streak = 0   # consecutive near-instant, no-op select() iterations
     while True:
         if not sel.get_map():
             time.sleep(RESCAN_SEC)      # every keyboard went away; keep looking
             scan(sel)
             last_scan = time.monotonic()
+            spin_streak = 0
             continue
+
+        loop_start = time.monotonic()
+        progressed = False   # did this iteration read/drop/change anything real?
 
         for key, _ in sel.select(timeout=RESCAN_SEC):
             try:
@@ -151,7 +156,10 @@ def main():
                 sync()
                 scan(sel)               # its replacement node is usually up now
                 last_scan = time.monotonic()
+                progressed = True
                 continue
+            if events:
+                progressed = True
             changed = False
             for ev in events:
                 if ev.type != e.EV_KEY or ev.code not in MODCAT:
@@ -164,6 +172,17 @@ def main():
                     changed = True
             if changed:
                 sync()
+
+        # Defense against a fd that selects ready over and over with nothing to
+        # show for it (e.g. a keyboard stuck re-enumerating): if select() keeps
+        # returning near-instantly with no reads/drops/changes, that's a busy
+        # spin -- back off instead of burning a full core for minutes.
+        if progressed or time.monotonic() - loop_start > 0.005:
+            spin_streak = 0
+        else:
+            spin_streak += 1
+            if spin_streak > 20:
+                time.sleep(0.05)
 
         now = time.monotonic()
         if now - last_scan >= RESCAN_SEC:
